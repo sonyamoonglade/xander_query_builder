@@ -1,11 +1,11 @@
 
 interface filter<T> {
-    where: T
+    where: Partial<T>
     returning?: string[] | '*'
     set? : Partial<T> | T
 }
 
-class QueryBuilder  {
+export class QueryBuilder  {
 
     private _tableName: string
 
@@ -17,7 +17,6 @@ class QueryBuilder  {
     private get getTableName(){
         return this._tableName
     }
-
 
     private static makeInsertValuesSql<Entity>(insertedObject: Entity): any[]{
 
@@ -68,11 +67,10 @@ class QueryBuilder  {
             const typeOfKey = typeof target[key]
             typeMap.set(key, typeOfKey)
         })
-        console.log(typeMap)
         return typeMap
     }
 
-    private static generateAssignments(keys:string[],values: any,isForSet?: boolean){
+    private static generateAssignments(keys:string[],values: any,isForSet: boolean = false){
         let assignments:string[] = []
         for(let i = 0; i < values.length;i++){
             const key = keys[i]
@@ -82,11 +80,12 @@ class QueryBuilder  {
             if(values.length > 1 && i !== values.length - 1 && typeof value !== 'string') {
                 assignment = `${key} = ${value}${separatorBasedOnIsForSet}`
             }
-            else if(typeof value == 'string') {
-                assignment = `${key} = '${value}'${isForSet && ','}`
+            else if(typeof value == 'string' && i !== values.length -1) {
+                 assignment = `${key} = '${value}' ${separatorBasedOnIsForSet}`
             }
             else {
-                assignment = `${key} = ${value}`
+                if (typeof value != 'string') assignment = `${key} = ${value}`
+                else assignment = `${key} = '${value}'`
             }
             assignments.push(assignment)
         }
@@ -100,33 +99,38 @@ class QueryBuilder  {
     }
 
     public insert<Entity>(insertedObject: Entity): (string | any)[]{
+        console.log(insertedObject);
         const [valuesSQL,typedValuesArray] = QueryBuilder.makeInsertValuesSql<Entity>(insertedObject)
-        const SQL = `insert into ${this.getTableName} ${valuesSQL}`
+        const joinedKeysOfInsertedObject = Object.keys(insertedObject).join(',')
+        const SQL = `insert into ${this.getTableName} (${joinedKeysOfInsertedObject}) ${valuesSQL}`
         return [SQL, typedValuesArray]
     }
 
-    public select<Entity>(expression: filter<Entity>){
+    public select<Entity>(expression?: filter<Entity>){
         // expression:{where : {id:0, name:'artem'} }
-        const conditions = expression.where
+        let sql;
+        if(!expression) return `select * from ${this.getTableName}`
+        const conditions = expression?.where
         const returning = expression?.returning
 
 
         const keys = Object.keys(conditions)
         const values = Object.values(conditions)
 
-        const whereStatement = QueryBuilder.generateAssignments(keys,values)
-        let sql;
-
+        const whereStatement = QueryBuilder.generateAssignments(keys,values, false)
+        console.log(whereStatement);
         if(returning == '*'){
             sql = `select * from ${this.getTableName} where ${whereStatement}`
+
         }
         else if(Array.isArray(returning)){
             const returningValues = (returning as string[]).join(',')
-            console.log(returningValues)
-            sql = `select ${returning} from ${this.getTableName} where ${whereStatement}`
+            sql = `select ${returningValues} from ${this.getTableName} where ${whereStatement}`
+
         }
         else {
             sql = `select * from ${this.getTableName} where ${whereStatement}`
+            console.log('here3');
         }
 
         return sql
